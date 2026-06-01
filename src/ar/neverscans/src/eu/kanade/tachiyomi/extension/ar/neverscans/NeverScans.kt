@@ -41,6 +41,19 @@ class NeverScans : HttpSource() {
         .add("Authorization", "Bearer $supabaseAnonKey")
         .add("Content-Type", "application/json")
 
+    override fun getMangaUrl(manga: SManga): String {
+        val slug = manga.url.removePrefix("/manga/")
+        return "$baseUrl/manga/$slug"
+    }
+
+    override fun getChapterUrl(chapter: SChapter): String {
+        val parts = chapter.url.split("/")
+        // url format: /manga/[slug]/[number]/cid/[id]
+        val slug = parts.getOrNull(2) ?: ""
+        val number = parts.getOrNull(3) ?: ""
+        return "$baseUrl/manga/$slug/$number"
+    }
+
     override fun popularMangaRequest(page: Int): Request {
         val offset = (page - 1) * PAGE_SIZE
         val url = "$supabaseUrl/rest/v1/manga?select=id,slug,title,cover_url,status,type,views&order=views.desc.nullslast&limit=$PAGE_SIZE&offset=$offset"

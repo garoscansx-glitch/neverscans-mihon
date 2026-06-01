@@ -71,7 +71,7 @@ class NeverScans : HttpSource() {
 
     override fun mangaDetailsRequest(manga: SManga): Request {
         val slug = manga.url.removePrefix("/manga/")
-        val url = "$supabaseUrl/rest/v1/manga?select=id,slug,title,cover_url,status,type,description,genres,authors&slug=eq.$slug&limit=1"
+        val url = "$supabaseUrl/rest/v1/manga?select=id,slug,title,cover_url,status,type,description,genre,author&slug=eq.$slug&limit=1"
         return GET(url, headers)
     }
 
@@ -131,8 +131,8 @@ class NeverScans : HttpSource() {
 
     private fun kotlinx.serialization.json.JsonObject.toSMangaDetails() = toSManga().apply {
         description = this@toSMangaDetails["description"]?.jsonPrimitive?.contentOrNull
-        genre = this@toSMangaDetails["genres"]?.jsonPrimitive?.contentOrNull
-        author = this@toSMangaDetails["authors"]?.jsonPrimitive?.contentOrNull
+        genre = this@toSMangaDetails["genre"]?.jsonPrimitive?.contentOrNull
+        author = this@toSMangaDetails["author"]?.jsonPrimitive?.contentOrNull
     }
 
     private fun kotlinx.serialization.json.JsonObject.toSChapter(mangaSlug: String) = SChapter.create().apply {

@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Headers
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import uy.kohesive.injekt.injectLazy
@@ -36,6 +37,10 @@ class NeverScans : HttpSource() {
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
+    private val imageClient: OkHttpClient by lazy {
+        network.cloudflareClient.newBuilder().build()
+    }
+
     override fun headersBuilder(): Headers.Builder = super.headersBuilder()
         .add("apikey", supabaseAnonKey)
         .add("Authorization", "Bearer $supabaseAnonKey")
@@ -48,7 +53,6 @@ class NeverScans : HttpSource() {
 
     override fun getChapterUrl(chapter: SChapter): String {
         val parts = chapter.url.split("/")
-        // url format: /manga/[slug]/[number]/cid/[id]
         val slug = parts.getOrNull(2) ?: ""
         val number = parts.getOrNull(3) ?: ""
         return "$baseUrl/manga/$slug/$number"
@@ -114,7 +118,7 @@ class NeverScans : HttpSource() {
 
     override fun pageListRequest(chapter: SChapter): Request {
         val chapterId = chapter.url.substringAfterLast("/cid/")
-        val url = "$supabaseUrl/rest/v1/chapter_pages?select=page_number,image_url&chapter_id=eq.$chapterId&order=page_number.asc"
+        val url = "$supabaseUrl/rest/v1/pages?select=index,image_url&chapter_id=eq.$chapterId&order=index.asc&limit=500"
         return GET(url, headers)
     }
 
@@ -127,6 +131,10 @@ class NeverScans : HttpSource() {
     }
 
     override fun imageUrlParse(response: Response): String = throw UnsupportedOperationException("Not used")
+
+    override fun imageRequest(page: Page): Request {
+        return GET(page.imageUrl!!, Headers.Builder().build())
+    }
 
     private fun kotlinx.serialization.json.JsonObject.toSManga() = SManga.create().apply {
         val slug = this@toSManga["slug"]?.jsonPrimitive?.contentOrNull ?: ""

@@ -1,7 +1,7 @@
 ext {
     extName = 'Never Scans'
     extClass = '.NeverScans'
-    extVersionCode = 2
+    extVersionCode = 4
     isNsfw = false
 }
 

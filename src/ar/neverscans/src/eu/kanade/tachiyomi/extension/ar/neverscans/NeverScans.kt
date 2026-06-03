@@ -13,7 +13,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Headers
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import uy.kohesive.injekt.injectLazy
@@ -29,16 +28,13 @@ class NeverScans : HttpSource() {
     override val supportsLatest = true
 
     private val supabaseUrl = "https://idxqgixfckisrcefcvsp.supabase.co"
+    private val storageUrl = "$supabaseUrl/storage/v1/object/public/chapters"
     private val supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkeHFnaXhmY2tpc3JjZWZjdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDQwOTksImV4cCI6MjA5MjM4MDA5OX0.Mospaymp0inRNpWySQCQsn6cfdkagH3lAM-LFkigqNc"
 
     private val json: Json by injectLazy()
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
-    }
-
-    private val imageClient: OkHttpClient by lazy {
-        network.cloudflareClient.newBuilder().build()
     }
 
     override fun headersBuilder(): Headers.Builder = super.headersBuilder()
@@ -110,22 +106,36 @@ class NeverScans : HttpSource() {
         val obj = array[0].jsonObject
         val mangaId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
         val slug = obj["slug"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
-        val chaptersUrl = "$supabaseUrl/rest/v1/chapters?select=id,number,title,created_at&manga_id=eq.$mangaId&published=eq.true&order=number.desc"
+        val chaptersUrl = "$supabaseUrl/rest/v1/chapters?select=id,number,title,created_at,manga_id&manga_id=eq.$mangaId&published=eq.true&order=number.desc"
         val chaptersResp = client.newCall(GET(chaptersUrl, headers)).execute()
         val chaptersArray = json.parseToJsonElement(chaptersResp.body.string()).jsonArray
         return chaptersArray.map { it.jsonObject.toSChapter(slug) }
     }
 
+    // pageListRequest gets chapter info including manga_id and page count
     override fun pageListRequest(chapter: SChapter): Request {
         val chapterId = chapter.url.substringAfterLast("/cid/")
-        val url = "$supabaseUrl/rest/v1/pages?select=index,image_url&chapter_id=eq.$chapterId&order=index.asc&limit=500"
+        val url = "$supabaseUrl/rest/v1/chapters?select=id,manga_id&id=eq.$chapterId&limit=1"
         return GET(url, headers)
     }
 
     override fun pageListParse(response: Response): List<Page> {
         val array = json.parseToJsonElement(response.body.string()).jsonArray
-        return array.mapIndexed { index, el ->
-            val imageUrl = el.jsonObject["image_url"]?.jsonPrimitive?.contentOrNull ?: ""
+        if (array.isEmpty()) return emptyList()
+        val obj = array[0].jsonObject
+        val chapterId = obj["id"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
+        val mangaId = obj["manga_id"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
+
+        // Fetch page count from pages table
+        val pagesUrl = "$supabaseUrl/rest/v1/pages?select=index&chapter_id=eq.$chapterId&order=index.asc"
+        val pagesResp = client.newCall(GET(pagesUrl, headers)).execute()
+        val pagesArray = json.parseToJsonElement(pagesResp.body.string()).jsonArray
+
+        // Build image URLs using storage path: chapters/{manga_id}/{chapter_id}/{0001}.webp
+        return pagesArray.mapIndexed { index, el ->
+            val pageIndex = el.jsonObject["index"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: index
+            val pageNumber = "%04d".format(pageIndex + 1)
+            val imageUrl = "$storageUrl/$mangaId/$chapterId/$pageNumber.webp"
             Page(index, imageUrl = imageUrl)
         }
     }
